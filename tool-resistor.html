@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>抵抗ネットワーク計算ツール | 回路メモと計算ツール</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <div class="logo">回路メモと計算ツール</div>
+      <nav class="nav">
+        <a href="./index.html">ホーム</a>
+        <a href="./tools.html">ツール</a>
+        <a href="./articles.html">記事</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="section">
+    <div class="container">
+      <div class="about-box" style="margin-bottom: 24px;">
+        <p class="meta">Tool</p>
+        <h1>抵抗ネットワーク計算ツール</h1>
+        <p>
+          直列・並列ブロックを追加しながら、各抵抗の電圧・電流・消費電力をまとめて計算します。
+        </p>
+      </div>
+
+      <div class="tool-wrap">
+        <div class="tool-grid">
+          <section class="card">
+            <h2>入力</h2>
+
+            <div class="row">
+              <div class="field col-4">
+                <label for="sourceMode">電源条件</label>
+                <select id="sourceMode">
+                  <option value="voltage">全体電圧を指定</option>
+                  <option value="current">全体電流を指定</option>
+                </select>
+              </div>
+
+              <div class="field col-4">
+                <label for="sourceValue">値</label>
+                <input id="sourceValue" type="number" step="any" value="12">
+              </div>
+
+              <div class="field col-4">
+                <label for="sourceUnit">単位</label>
+                <input id="sourceUnit" type="text" value="V" disabled>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="field col-4">
+                <label for="newType">追加するブロック</label>
+                <select id="newType">
+                  <option value="series">直列ブロック</option>
+                  <option value="parallel">並列ブロック</option>
+                </select>
+              </div>
+
+              <div class="field col-4">
+                <label for="newName">ブロック名</label>
+                <input id="newName" type="text" value="Block 1">
+              </div>
+
+              <div class="field col-4">
+                <label for="newValues">抵抗値 [Ω]</label>
+                <input id="newValues" type="text" value="10, 20, 30">
+              </div>
+            </div>
+
+            <div class="buttons">
+              <button id="addBlockBtn">ブロック追加</button>
+              <button id="sampleBtn" class="secondary">サンプル読込</button>
+              <button id="exportCsvBtn" class="secondary">CSV出力</button>
+              <button id="saveJsonBtn" class="secondary">JSON保存</button>
+              <button id="loadJsonBtn" class="secondary">JSON読込</button>
+              <button id="clearBtn" class="danger">全消去</button>
+            </div>
+
+            <input id="jsonFileInput" type="file" accept=".json,application/json" style="display:none;">
+
+            <div id="networkList" class="network-list"></div>
+
+            <p class="note">
+              ・全体は「ブロック同士が直列接続」の構成です。<br>
+              ・直列ブロック内は同一電流、並列ブロック内は同一電圧で計算します。
+            </p>
+          </section>
+
+          <section class="card">
+            <h2>計算結果</h2>
+            <div id="resultSummary" class="summary"></div>
+            <div id="resultMessage"></div>
+            <div id="resultTable"></div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="./tool-resistor.js"></script>
+</body>
+</html>
