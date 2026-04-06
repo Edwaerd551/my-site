@@ -12,17 +12,48 @@ const resultMessageEl = document.getElementById("resultMessage");
 const resultTableEl = document.getElementById("resultTable");
 const jsonFileInputEl = document.getElementById("jsonFileInput");
 
+const EPSILON = 1e-12;
+
+function normalizeZero(value) {
+  if (!Number.isFinite(value)) return value;
+  return Math.abs(value) < EPSILON ? 0 : value;
+}
+
 function formatNumber(value, digits = 4) {
   if (!Number.isFinite(value)) return "-";
-  if (value === 0) return "0";
 
-  const abs = Math.abs(value);
+  const normalized = normalizeZero(value);
+  if (normalized === 0) return "0";
+
+  const abs = Math.abs(normalized);
 
   if (abs >= 1e4 || abs < 1e-3) {
-    return value.toExponential(3);
+    return normalized.toExponential(3);
   }
 
-  return Number(value.toFixed(digits)).toString();
+  return Number(normalized.toFixed(digits)).toString();
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function showMessage(message, type = "ok") {
+  const safe = escapeHtml(message);
+  resultMessageEl.innerHTML = `<div class="${type}">${safe}</div>`;
+}
+
+function getNextBlockName() {
+  return `Block ${blocks.length + 1}`;
+}
+
+function setDefaultBlockName() {
+  newNameEl.value = getNextBlockName();
 }
 
 function syncUnitLabel() {
@@ -31,9 +62,9 @@ function syncUnitLabel() {
 }
 
 function parseResistorValues(text) {
-  const parts = text
+  const parts = String(text)
     .split(/[，,\s]+/)
-    .map(v => v.trim())
+    .map((v) => v.trim())
     .filter(Boolean);
 
   if (parts.length === 0) {
@@ -60,37 +91,41 @@ function calcEquivalent(block) {
   return 1 / inv;
 }
 
-function addBlock(name, type, values) {
-  const safeName = name.trim() || `Block ${blocks.length + 1}`;
-  const resistors = values.map((value, idx) => ({
+function createResistors(blockName, values) {
+  return values.map((value, idx) => ({
     id: crypto.randomUUID(),
-    name: `${safeName}-R${idx + 1}`,
+    name: `${blockName}-R${idx + 1}`,
     value
   }));
+}
+
+function addBlock(name, type, values) {
+  const safeName = String(name || "").trim() || getNextBlockName();
 
   blocks.push({
     id: crypto.randomUUID(),
     name: safeName,
     type,
-    resistors
+    resistors: createResistors(safeName, values)
   });
 
   renderBlocks();
   calculateAndRender();
-  newNameEl.value = `Block ${blocks.length + 1}`;
+  setDefaultBlockName();
 }
 
 function removeBlock(blockId) {
-  const index = blocks.findIndex(block => block.id === blockId);
-  if (index >= 0) {
-    blocks.splice(index, 1);
-    renderBlocks();
-    calculateAndRender();
-  }
+  const index = blocks.findIndex((block) => block.id === blockId);
+  if (index < 0) return;
+
+  blocks.splice(index, 1);
+  renderBlocks();
+  calculateAndRender();
+  setDefaultBlockName();
 }
 
 function moveBlockUp(blockId) {
-  const index = blocks.findIndex(block => block.id === blockId);
+  const index = blocks.findIndex((block) => block.id === blockId);
   if (index <= 0) return;
 
   [blocks[index - 1], blocks[index]] = [blocks[index], blocks[index - 1]];
@@ -99,7 +134,7 @@ function moveBlockUp(blockId) {
 }
 
 function moveBlockDown(blockId) {
-  const index = blocks.findIndex(block => block.id === blockId);
+  const index = blocks.findIndex((block) => block.id === blockId);
   if (index < 0 || index >= blocks.length - 1) return;
 
   [blocks[index], blocks[index + 1]] = [blocks[index + 1], blocks[index]];
@@ -108,13 +143,13 @@ function moveBlockDown(blockId) {
 }
 
 function editBlock(blockId) {
-  const block = blocks.find(b => b.id === blockId);
+  const block = blocks.find((b) => b.id === blockId);
   if (!block) return;
 
   const newName = prompt("ブロック名を入力してください", block.name);
   if (newName === null) return;
 
-  const currentValues = block.resistors.map(r => r.value).join(", ");
+  const currentValues = block.resistors.map((r) => r.value).join(", ");
   const newValuesText = prompt("抵抗値 [Ω] をカンマ区切りで入力してください", currentValues);
   if (newValuesText === null) return;
 
@@ -123,36 +158,25 @@ function editBlock(blockId) {
     const safeName = newName.trim() || block.name;
 
     block.name = safeName;
-    block.resistors = values.map((value, idx) => ({
-      id: crypto.randomUUID(),
-      name: `${safeName}-R${idx + 1}`,
-      value
-    }));
+    block.resistors = createResistors(safeName, values);
 
     renderBlocks();
     calculateAndRender();
+    showMessage(`「${safeName}」を更新しました。`, "ok");
   } catch (error) {
     renderError(error.message || "編集に失敗しました。");
   }
 }
 
 function duplicateBlock(blockId) {
-  const block = blocks.find(b => b.id === blockId);
+  const block = blocks.find((b) => b.id === blockId);
   if (!block) return;
 
   const copiedName = `${block.name} copy`;
-  const values = block.resistors.map(r => r.value);
+  const values = block.resistors.map((r) => r.value);
 
   addBlock(copiedName, block.type, values);
-}
-
-function escapeHtml(text) {
-  return String(text)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+  showMessage(`「${block.name}」を複製しました。`, "ok");
 }
 
 function getBlockSummaries() {
@@ -161,7 +185,7 @@ function getBlockSummaries() {
   const sourceValue = Number(sourceValueEl.value);
   if (!Number.isFinite(sourceValue) || sourceValue <= 0) return [];
 
-  const blockResults = blocks.map(block => {
+  const blockResults = blocks.map((block) => {
     const equivalentResistance = calcEquivalent(block);
     return {
       ...block,
@@ -185,17 +209,17 @@ function getBlockSummaries() {
     totalVoltage = totalCurrent * totalResistance;
   }
 
-  return blockResults.map(block => {
+  return blockResults.map((block) => {
     const blockVoltage = totalCurrent * block.equivalentResistance;
     const blockCurrent = totalCurrent;
     const blockPower = blockVoltage * blockCurrent;
 
     return {
       id: block.id,
-      equivalentResistance: block.equivalentResistance,
-      blockVoltage,
-      blockCurrent,
-      blockPower
+      equivalentResistance: normalizeZero(block.equivalentResistance),
+      blockVoltage: normalizeZero(blockVoltage),
+      blockCurrent: normalizeZero(blockCurrent),
+      blockPower: normalizeZero(blockPower)
     };
   });
 }
@@ -208,33 +232,35 @@ function renderBlocks() {
 
   const summaries = getBlockSummaries();
 
-  networkListEl.innerHTML = blocks.map((block, blockIndex) => {
-    const values = block.resistors.map(r => `${formatNumber(r.value)}Ω`).join(", ");
-    const summary = summaries.find(item => item.id === block.id);
+  networkListEl.innerHTML = blocks
+    .map((block, blockIndex) => {
+      const values = block.resistors.map((r) => `${formatNumber(r.value)}Ω`).join(", ");
+      const summary = summaries.find((item) => item.id === block.id);
 
-    return `
-      <div class="item">
-        <div class="item-head">
-          <div>
-            <div><strong>${blockIndex + 1}. ${escapeHtml(block.name)}</strong></div>
-            <div class="sub">${escapeHtml(values)}</div>
+      return `
+        <div class="item">
+          <div class="item-head">
+            <div>
+              <div><strong>${blockIndex + 1}. ${escapeHtml(block.name)}</strong></div>
+              <div class="sub">${escapeHtml(values)}</div>
+            </div>
+            <div class="inline-buttons">
+              <span class="badge">${block.type === "series" ? "直列" : "並列"}</span>
+              <button class="small-btn" onclick="moveBlockUp('${block.id}')">↑</button>
+              <button class="small-btn" onclick="moveBlockDown('${block.id}')">↓</button>
+              <button class="small-btn secondary" onclick="editBlock('${block.id}')">編集</button>
+              <button class="small-btn" onclick="duplicateBlock('${block.id}')">複製</button>
+              <button class="small-btn danger" onclick="removeBlockWithConfirm('${block.id}')">削除</button>
+            </div>
           </div>
-          <div class="inline-buttons">
-            <span class="badge">${block.type === "series" ? "直列" : "並列"}</span>
-            <button class="small-btn" onclick="moveBlockUp('${block.id}')">↑</button>
-            <button class="small-btn" onclick="moveBlockDown('${block.id}')">↓</button>
-            <button class="small-btn secondary" onclick="editBlock('${block.id}')">編集</button>
-            <button class="small-btn" onclick="duplicateBlock('${block.id}')">複製</button>
-            <button class="small-btn danger" onclick="removeBlock('${block.id}')">削除</button>
-          </div>
+          <div class="sub">合成抵抗: ${summary ? formatNumber(summary.equivalentResistance) : "-"} Ω</div>
+          <div class="sub">ブロック電圧: ${summary ? formatNumber(summary.blockVoltage) : "-"} V</div>
+          <div class="sub">ブロック電流: ${summary ? formatNumber(summary.blockCurrent) : "-"} A</div>
+          <div class="sub">ブロック電力: ${summary ? formatNumber(summary.blockPower) : "-"} W</div>
         </div>
-        <div class="sub">合成抵抗: ${summary ? formatNumber(summary.equivalentResistance) : "-"} Ω</div>
-        <div class="sub">ブロック電圧: ${summary ? formatNumber(summary.blockVoltage) : "-"} V</div>
-        <div class="sub">ブロック電流: ${summary ? formatNumber(summary.blockCurrent) : "-"} A</div>
-        <div class="sub">ブロック電力: ${summary ? formatNumber(summary.blockPower) : "-"} W</div>
-      </div>
-    `;
-  }).join("");
+      `;
+    })
+    .join("");
 }
 
 function calculateNetwork() {
@@ -247,7 +273,7 @@ function calculateNetwork() {
     throw new Error("電源条件の値は0より大きい数値にしてください。");
   }
 
-  const blockResults = blocks.map(block => {
+  const blockResults = blocks.map((block) => {
     const eq = calcEquivalent(block);
     return {
       ...block,
@@ -290,15 +316,15 @@ function calculateNetwork() {
           blockName: block.name,
           blockType: "直列",
           resistorName: resistor.name,
-          resistance: resistor.value,
-          voltage,
-          current,
-          power,
-          blockVoltage,
-          blockCurrent,
-          blockPower,
-          positionVoltageStart: runningVoltage,
-          positionVoltageEnd: runningVoltage + voltage
+          resistance: normalizeZero(resistor.value),
+          voltage: normalizeZero(voltage),
+          current: normalizeZero(current),
+          power: normalizeZero(power),
+          blockVoltage: normalizeZero(blockVoltage),
+          blockCurrent: normalizeZero(blockCurrent),
+          blockPower: normalizeZero(blockPower),
+          positionVoltageStart: normalizeZero(runningVoltage),
+          positionVoltageEnd: normalizeZero(runningVoltage + voltage)
         });
 
         runningVoltage += voltage;
@@ -317,15 +343,15 @@ function calculateNetwork() {
           blockName: block.name,
           blockType: "並列",
           resistorName: resistor.name,
-          resistance: resistor.value,
-          voltage,
-          current,
-          power,
-          blockVoltage,
-          blockCurrent,
-          blockPower,
-          positionVoltageStart: startV,
-          positionVoltageEnd: endV
+          resistance: normalizeZero(resistor.value),
+          voltage: normalizeZero(voltage),
+          current: normalizeZero(current),
+          power: normalizeZero(power),
+          blockVoltage: normalizeZero(blockVoltage),
+          blockCurrent: normalizeZero(blockCurrent),
+          blockPower: normalizeZero(blockPower),
+          positionVoltageStart: normalizeZero(startV),
+          positionVoltageEnd: normalizeZero(endV)
         });
       });
 
@@ -336,10 +362,10 @@ function calculateNetwork() {
   const totalPower = totalVoltage * totalCurrent;
 
   return {
-    totalResistance,
-    totalVoltage,
-    totalCurrent,
-    totalPower,
+    totalResistance: normalizeZero(totalResistance),
+    totalVoltage: normalizeZero(totalVoltage),
+    totalCurrent: normalizeZero(totalCurrent),
+    totalPower: normalizeZero(totalPower),
     rows
   };
 }
@@ -364,7 +390,7 @@ function renderResults(result) {
     </div>
   `;
 
-  resultMessageEl.innerHTML = '<div class="ok">計算できました。</div>';
+  showMessage("計算できました。", "ok");
 
   resultTableEl.innerHTML = `
     <table>
@@ -382,7 +408,9 @@ function renderResults(result) {
         </tr>
       </thead>
       <tbody>
-        ${result.rows.map(row => `
+        ${result.rows
+          .map(
+            (row) => `
           <tr>
             <td>${row.blockNo}. ${escapeHtml(row.blockName)}</td>
             <td>${escapeHtml(row.resistorName)}</td>
@@ -394,7 +422,9 @@ function renderResults(result) {
             <td>${formatNumber(row.positionVoltageStart)}</td>
             <td>${formatNumber(row.positionVoltageEnd)}</td>
           </tr>
-        `).join("")}
+        `
+          )
+          .join("")}
       </tbody>
     </table>
   `;
@@ -434,7 +464,7 @@ function exportCsv() {
       "終点電位[V]"
     ];
 
-    const rows = result.rows.map(row => [
+    const rows = result.rows.map((row) => [
       row.blockNo,
       row.blockName,
       row.resistorName,
@@ -460,9 +490,9 @@ function exportCsv() {
     ];
 
     const csvLines = [
-      ...summaryRows.map(row => row.map(csvEscape).join(",")),
+      ...summaryRows.map((row) => row.map(csvEscape).join(",")),
       header.map(csvEscape).join(","),
-      ...rows.map(row => row.map(csvEscape).join(","))
+      ...rows.map((row) => row.map(csvEscape).join(","))
     ];
 
     const csvContent = "\uFEFF" + csvLines.join("\r\n");
@@ -470,7 +500,7 @@ function exportCsv() {
     const url = URL.createObjectURL(blob);
 
     const now = new Date();
-    const pad = n => String(n).padStart(2, "0");
+    const pad = (n) => String(n).padStart(2, "0");
     const filename =
       `resistor-network-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-` +
       `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.csv`;
@@ -483,6 +513,7 @@ function exportCsv() {
     a.remove();
 
     URL.revokeObjectURL(url);
+    showMessage("CSVを出力しました。", "ok");
   } catch (error) {
     renderError(error.message || "CSV出力に失敗しました。");
   }
@@ -494,10 +525,10 @@ function buildSaveData() {
     savedAt: new Date().toISOString(),
     sourceMode: sourceModeEl.value,
     sourceValue: Number(sourceValueEl.value),
-    blocks: blocks.map(block => ({
+    blocks: blocks.map((block) => ({
       name: block.name,
       type: block.type,
-      resistors: block.resistors.map(r => ({
+      resistors: block.resistors.map((r) => ({
         name: r.name,
         value: r.value
       }))
@@ -513,7 +544,7 @@ function saveJson() {
     const url = URL.createObjectURL(blob);
 
     const now = new Date();
-    const pad = n => String(n).padStart(2, "0");
+    const pad = (n) => String(n).padStart(2, "0");
     const filename =
       `resistor-network-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-` +
       `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.json`;
@@ -526,6 +557,7 @@ function saveJson() {
     a.remove();
 
     URL.revokeObjectURL(url);
+    showMessage("JSONを保存しました。", "ok");
   } catch (error) {
     renderError(error.message || "JSON保存に失敗しました。");
   }
@@ -538,6 +570,11 @@ function validateLoadedData(data) {
 
   if (!["voltage", "current"].includes(data.sourceMode)) {
     throw new Error("sourceMode が不正です。");
+  }
+
+  const sourceValue = Number(data.sourceValue);
+  if (!Number.isFinite(sourceValue) || sourceValue <= 0) {
+    throw new Error("sourceValue が不正です。");
   }
 
   if (!Array.isArray(data.blocks)) {
@@ -572,10 +609,14 @@ function loadFromData(data) {
   blocks.length = 0;
 
   data.blocks.forEach((block, blockIndex) => {
-    const safeName = String(block.name || `Block ${blockIndex + 1}`).trim() || `Block ${blockIndex + 1}`;
+    const safeName =
+      String(block.name || `Block ${blockIndex + 1}`).trim() || `Block ${blockIndex + 1}`;
+
     const resistors = block.resistors.map((resistor, resistorIndex) => ({
       id: crypto.randomUUID(),
-      name: resistor.name ? String(resistor.name) : `${safeName}-R${resistorIndex + 1}`,
+      name: resistor.name
+        ? String(resistor.name)
+        : `${safeName}-R${resistorIndex + 1}`,
       value: Number(resistor.value)
     }));
 
@@ -588,9 +629,10 @@ function loadFromData(data) {
   });
 
   sourceModeEl.value = data.sourceMode;
-  sourceValueEl.value = String(data.sourceValue ?? 12);
-  newNameEl.value = `Block ${blocks.length + 1}`;
+  sourceValueEl.value = String(data.sourceValue);
+  setDefaultBlockName();
   syncUnitLabel();
+  showMessage("JSONを読み込みました。", "ok");
 }
 
 function openJsonFile() {
@@ -623,8 +665,8 @@ function handleJsonFileSelected(event) {
 
 function calculateAndRender() {
   try {
-    const result = calculateNetwork();
     renderBlocks();
+    const result = calculateNetwork();
     renderResults(result);
   } catch (error) {
     renderBlocks();
@@ -632,19 +674,38 @@ function calculateAndRender() {
   }
 }
 
+function removeBlockWithConfirm(blockId) {
+  const block = blocks.find((b) => b.id === blockId);
+  if (!block) return;
+
+  const ok = window.confirm(`「${block.name}」を削除しますか？`);
+  if (!ok) return;
+
+  removeBlock(blockId);
+  showMessage(`「${block.name}」を削除しました。`, "ok");
+}
+
 document.getElementById("addBlockBtn").addEventListener("click", () => {
   try {
     const values = parseResistorValues(newValuesEl.value);
     addBlock(newNameEl.value, newTypeEl.value, values);
+    showMessage("ブロックを追加しました。", "ok");
   } catch (error) {
     renderError(error.message || "追加に失敗しました。");
   }
 });
 
 document.getElementById("clearBtn").addEventListener("click", () => {
+  if (blocks.length === 0) return;
+
+  const ok = window.confirm("ブロックをすべて削除しますか？");
+  if (!ok) return;
+
   blocks.length = 0;
   renderBlocks();
   calculateAndRender();
+  setDefaultBlockName();
+  showMessage("すべてのブロックを削除しました。", "ok");
 });
 
 document.getElementById("exportCsvBtn").addEventListener("click", () => {
@@ -667,11 +728,19 @@ document.getElementById("sampleBtn").addEventListener("click", () => {
   sourceModeEl.value = "voltage";
   sourceValueEl.value = "24";
   syncUnitLabel();
+  showMessage("サンプル回路を読み込みました。", "ok");
 });
 
 sourceModeEl.addEventListener("change", syncUnitLabel);
 sourceValueEl.addEventListener("input", calculateAndRender);
 jsonFileInputEl.addEventListener("change", handleJsonFileSelected);
 
+window.moveBlockUp = moveBlockUp;
+window.moveBlockDown = moveBlockDown;
+window.editBlock = editBlock;
+window.duplicateBlock = duplicateBlock;
+window.removeBlockWithConfirm = removeBlockWithConfirm;
+
 renderBlocks();
+setDefaultBlockName();
 syncUnitLabel();
